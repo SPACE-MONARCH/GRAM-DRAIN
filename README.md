@@ -198,6 +198,15 @@ pyproj  whitebox  cloth-simulation-filter  networkx  matplotlib  tqdm
 
 ---
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture Overview](docs/ARCHITECTURE.md) | System design and pipeline flow |
+| [Methodology](docs/methodology.md) | Algorithm details, CSF parameters, XGBoost features |
+| [Outputs Guide](docs/outputs_guide.md) | All output formats, file naming, OGC compliance |
+| [Dashboard Example — DHAL](docs/DashboardExample_DHAL.pdf) | Sample Streamlit dashboard report for DHAL village |
+
 # CSF Ground Classification Parameters
 
 | Parameter | Value | Rationale |

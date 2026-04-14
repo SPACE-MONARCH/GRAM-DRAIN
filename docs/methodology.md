@@ -1,13 +1,13 @@
-# GramDrain — Full Technical Methodology
+# GramDrain - Full Technical Methodology
 
 This document describes every algorithm, parameter, and design decision in the GramDrain pipeline in detail.
-For the submission summary, see `submission_form.md`. For setup instructions, see the root `README.md`.
+For the submission summary, see `submission_form.docx`. For setup instructions, see the root `README.md`.
 
 ---
 
-## Stage 1 — LiDAR Ingestion & Memory-Adaptive Ground Classification
+# Stage 1 - LiDAR Ingestion & Memory-Adaptive Ground Classification
 
-### 1a. File I/O and Coordinate Type Detection
+# 1a. File I/O and Coordinate Type Detection
 
 Raw point cloud files (`.las` / `.laz`, up to 11.6 GB) are opened in streaming mode using `laspy[lazrs]`
 without loading all points into RAM. Only the LAS header is read first to extract:
@@ -15,7 +15,7 @@ without loading all points into RAM. Only the LAS header is read first to extrac
 - Bounding box `[xmin, xmax, ymin, ymax]`
 - Coordinate type: if `max(x_range, y_range) < 2.0` → **Geographic (WGS84)**; else → **Projected (UTM)**
 
-### 1b. Dynamic Memory Scaling — `_compute_dynamic_params()`
+# 1b. Dynamic Memory Scaling - `_compute_dynamic_params()`
 
 Before reading any points, two critical parameters are derived from the header alone:
 
@@ -29,7 +29,7 @@ Before reading any points, two critical parameters are derived from the header a
 - `stride_pts  = ⌈total_pts  / 330,000,000⌉`
 - `STRIDE = min(max(stride_dict, stride_pts), 50)`
 
-### 1c. NumPy Grid Accumulator
+# 1c. NumPy Grid Accumulator
 
 Three pre-allocated arrays `(grid_rows × grid_cols)`:
 - `min_z: float32` — running minimum elevation per cell
@@ -46,12 +46,12 @@ Memory: 20 B/cell × 16M cells = **305 MB** (vs ~4.9 GB Python dict equivalent).
 
 Final extraction: `np.column_stack([min_x[valid_mask], min_y[valid_mask], min_z[valid_mask]])` — single-pass, no spike.
 
-### 1d. Reprojection
+# 1d. Reprojection
 
 Geographic files (PIRAYANKUPPAM, THANDALAM) are reprojected WGS84 → UTM using `pyproj.Transformer`
 **after** downsampling, not on the raw point cloud.
 
-### 1e. Cloth Simulation Filter (CSF)
+# 1e. Cloth Simulation Filter (CSF)
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
@@ -64,7 +64,7 @@ Geographic files (PIRAYANKUPPAM, THANDALAM) are reprojected WGS84 → UTM using 
 
 ---
 
-## Stage 2 — DTM Generation
+# Stage 2 - DTM Generation
 
 1. **Min-z binning** at 1 m resolution into a `float32` grid
 2. **Weighted void fill**: `dtm = uniform_filter(dtm_f, 5) / max(uniform_filter(valid_mask, 5), 1e-6)`
@@ -75,13 +75,13 @@ Output: OGC Cloud-Optimised GeoTIFF — LZW compressed, 256×256 tiled, `predict
 
 ---
 
-## Stage 3 — Terrain Derivatives
+# Stage 3 - Terrain Derivatives
 
-### Slope
+# Slope
 Primary: WhiteboxTools `slope()` (Horn's 3×3 finite-difference, degrees).
 Fallback: `np.gradient` + `arctan(sqrt(dx² + dy²))`.
 
-### Multi-Scale Flow Accumulation
+# Multi-Scale Flow Accumulation
 ```
 r5  = DTM − minimum_filter(DTM, 5)
 r21 = DTM − minimum_filter(DTM, 21)
@@ -90,16 +90,16 @@ accum = 0.2·exp(−r5/σ5) + 0.3·exp(−r21/σ21) + 0.5·exp(−r51/σ51)
 ```
 Followed by `gaussian_filter(sigma=3)`. Stream channels = top 3rd percentile of accumulation.
 
-### Topographic Wetness Index (TWI)
+# Topographic Wetness Index (TWI)
 ```
 TWI = ln((accum × 100 + 1) / (tan(slope_rad) + 1e-6))
 ```
 
 ---
 
-## Stage 4 — Waterlogging Hotspot Classification
+# Stage 4 - Waterlogging Hotspot Classification
 
-### 12-Feature Matrix
+# 12-Feature Matrix
 
 | # | Feature | Window | Physical meaning |
 |---|---------|--------|-----------------|
@@ -116,7 +116,7 @@ TWI = ln((accum × 100 + 1) / (tan(slope_rad) + 1e-6))
 | 11 | Mean accumulation | 11×11 | Meso drainage density |
 | 12 | Elevation range | 11×11 | Depression depth |
 
-### Rule-Based Labels (pseudo ground-truth)
+# Rule-Based Labels (pseudo ground-truth)
 ```
 risk_rule = 0.40·norm(TWI) + 0.35·norm(accum) + 0.15·(1−norm(slope)) + 0.10·(1−norm(z))
 Class 2 (High)   : risk_rule > 0.92
@@ -124,7 +124,7 @@ Class 1 (Medium) : 0.78 ≤ risk_rule ≤ 0.92
 Class 0 (Safe)   : < 0.78
 ```
 
-### XGBoost Hyperparameters
+# XGBoost Hyperparameters
 | Parameter | Value |
 |-----------|-------|
 | `n_estimators` | 150 |
@@ -136,28 +136,28 @@ Class 0 (Safe)   : < 0.78
 | Training samples | ≤ 200,000 px |
 | Inference chunk | 500,000 px |
 
-### Morphological Post-Processing
+# Morphological Post-Processing
 - `binary_opening(3×3)` — removes isolated noise pixels
 - `binary_closing(5×5)` — fills holes within hotspot clusters
 - Applied per class (High → Medium) with NODATA masking
 
 ---
 
-## Stage 5 — Gravity-Corrected Drainage Network Design
+# Stage 5 - Gravity-Corrected Drainage Network Design
 
-### Cost Surface
+# Cost Surface
 ```
 cost[r,c] = (1 − norm_accum[r,c]) × 60 + norm_elev[r,c] × 40 + 1
 NODATA cells → cost = 9,999  (impenetrable boundary)
 ```
 
-### Dijkstra Routing (8-connectivity)
+# Dijkstra Routing (8-connectivity)
 - Source: centre of mass of each High-risk cluster (≥ 25 px)
 - Target: nearest stream-channel cell (top 3rd percentile accumulation)
 - Diagonal cost: `1.414 × cost_cell`; Cardinal: `1.0 × cost_cell`
 - Up to 50 clusters routed per village
 
-### Vector Output (GeoPackage layers)
+# Vector Output (GeoPackage layers)
 | Layer | Geometry | Key fields |
 |-------|----------|------------|
 | `proposed_drains` | LineString | cluster_id, length_m, hotspot_area |

@@ -1,11 +1,10 @@
-# GramDrain — AI/ML Waterlogging Detection & Gravity-Based Drainage Planning for Gram Panchayats
+# GramDrain - AI/ML Waterlogging Detection & Gravity-Based Drainage Planning for Gram Panchayats
 
-> **Ministry of Panchayati Raj — Geospatial Intelligence Challenge**
-> Submitted by: **[Your Team Name]** | Institution: **[Your Institution]**
+> **Ministry of Panchayati Raj - Geospatial Intelligence Challenge**
 
 ---
 
-## Overview
+# Overview
 
 **GramDrain** is a fully automated, end-to-end geospatial intelligence pipeline that converts raw village-scale LiDAR point clouds (`.las` / `.laz`) into government-ready drainage planning deliverables. The system identifies waterlogging-prone zones and proposes gravity-correct drain alignments — all without manual GIS intervention.
 
@@ -13,7 +12,7 @@ The pipeline processes point clouds ranging from **9.8 million to 1.65 billion p
 
 ---
 
-## The Problem
+# The Problem
 
 Recurring waterlogging in rural Gram Panchayats causes crop loss, property damage, and health hazards. Village-level, terrain-informed drainage planning is difficult to scale because:
 
@@ -24,7 +23,7 @@ Recurring waterlogging in rural Gram Panchayats causes crop loss, property damag
 
 ---
 
-## Solution — Five-Stage Pipeline
+# Solution — Five-Stage Pipeline
 
 ```
 LiDAR (.las/.laz)
@@ -58,9 +57,9 @@ LiDAR (.las/.laz)
 
 ---
 
-## Key Technical Innovations
+# Key Technical Innovations
 
-### NumPy Grid Accumulator (16× RAM reduction)
+# NumPy Grid Accumulator (16× RAM reduction)
 The standard approach of storing voxel min-z values in a Python dictionary caused crashes on the 1.65B-point Kadamtala file (~4.9 GB heap). Replaced with three pre-allocated NumPy arrays (`min_z: float32`, `min_x: float64`, `min_y: float64`) of shape `(grid_rows, grid_cols)`:
 
 - **Dict approach**: 320 bytes/entry × 32M entries = **4.9 GB** + 0.5 GB spike on extraction
@@ -68,14 +67,14 @@ The standard approach of storing voxel min-z values in a Python dictionary cause
 
 Intra-chunk deduplication is fully vectorised using `np.lexsort + np.unique` — no Python-level loops.
 
-### Dynamic Memory Scaling
+# Dynamic Memory Scaling
 `_compute_dynamic_params()` reads only the LAS file header (not the points) and auto-computes:
 - `VOXEL_RES` — snapped to the nearest standard voxel size from `[0.05 → 10.00]` metres, ensuring grid ≤ 4,000 × 4,000 cells
 - `STRIDE` — sub-sampling ratio derived from both grid density and total point count constraints
 
 This means **zero manual parameter tuning** across files spanning 9.8M to 1.65B points.
 
-### 12-Feature XGBoost Classifier
+# 12-Feature XGBoost Classifier
 Per-village retraining with features spanning three spatial scales:
 
 | Scale | Features |
@@ -86,18 +85,18 @@ Per-village retraining with features spanning three spatial scales:
 
 Pseudo-ground-truth labels are generated from a physics-based terrain rule, then used to train a village-specific XGBoost model that generalises beyond simple thresholding.
 
-### Gravity-Correct Dijkstra Routing
+# Gravity-Correct Dijkstra Routing
 Proposed drain alignments follow natural watercourses using a composite cost surface:
 
-```
+'''
 cost = (1 − norm_accum) × 60 + norm_elev × 40 + 1
-```
+'''
 
 Low-cost paths run along valley floors (high accumulation + low elevation), guaranteeing all proposed drains are **gravity-fed** and never cross village boundaries (NODATA cells = cost 9,999).
 
 ---
 
-## Dataset — 10 Villages Processed
+# Dataset - 10 Villages Processed
 
 | Village | State | Points | Size | Coord System | EPSG |
 |---------|-------|--------|------|--------------|------|
@@ -114,7 +113,7 @@ Low-cost paths run along valley floors (high accumulation + low elevation), guar
 
 ---
 
-## Outputs Per Village
+# Outputs Per Village
 
 | Output | Format | Description |
 |--------|--------|-------------|
@@ -125,40 +124,36 @@ Low-cost paths run along valley floors (high accumulation + low elevation), guar
 | TWI raster | `.tif` (COG, float32) | Topographic Wetness Index |
 | Confidence raster | `.tif` (COG, float32) | XGBoost prediction confidence |
 | Drainage GeoPackage | `.gpkg` (3 layers) | Proposed drains + hotspot polygons + stream channels |
-| Village report | `.png` (1200 × 840) | DTM, risk map, confusion matrix, classification report |
-| Overview report | `.png` | All-village composite map |
+| Village report | `.png` (2400 × 1680 @ 120 DPI) | DTM, risk map, confusion matrix, ML classification report table, stats summary bar |
 
 ---
-
-## Repository Structure
-
-```
-gramDrain-mopr/
-├── notebooks/
-│   └── IITT_V4-4.ipynb          ← main Colab pipeline
-├── docs/
-│   ├── methodology.md            ← detailed algorithm documentation
-│   ├── submission_form.docx
-│   └── screenshots/              ← village report PNGs
-├── outputs/
-│   └── sample/                   ← small demo outputs for repo preview
-├── .gitignore
-└── README.md
-```
-
+Repo structure
+# add after frontend
 > **Note:** Raw LiDAR files (`.las` / `.laz`) and full-resolution raster outputs are stored on Google Drive, not in this repository. See *Running the Pipeline* below.
 
 ---
 
-## Running the Pipeline
+# Running the Pipeline
 
-### Requirements
+# Requirements
 - Google Colab (High-RAM runtime, ≥ 52 GB recommended)
 - Google Drive with LiDAR input files mounted at `/content/drive/MyDrive/hackathon_data/`
 
-### Setup
+## Streamlit Dashboard
 
-Open `notebooks/IITT_V4-4.ipynb` in Google Colab, then run cells in order:
+A browser-based interactive calculator is included for instant pipeline parameter estimation without running the full pipeline.
+
+### Run locally
+```bash
+pip install -r requirements.txt
+streamlit run lidar_calculator.py
+```
+
+Upload any `.las` / `.laz` file → parameters are auto-detected from the 400-byte header → no full file load required. The dashboard also supports triggering the full pipeline and downloading all outputs.
+
+# Setup
+
+Open `notebooks/IITT.ipynb` in Google Colab, then run cells in order:
 
 **Cell 1** — Install system dependencies and Python packages:
 ```
@@ -172,15 +167,13 @@ pyproj  whitebox  cloth-simulation-filter  networkx  matplotlib  tqdm
 
 **Cell 4** — Inspect point counts and coordinate types for all villages.
 
-**Cell 5C** — Define all pipeline functions (ground classification, DTM, features, XGBoost, routing).
+**Cell 5** — Define all pipeline functions (ground classification, DTM, features, XGBoost, routing).
 
 **Cells 6–11** — Process each village. The auto-detector selects `classify_ground_regular` or `classify_ground_chunked` based on point count:
 - `< 50M points` → regular (full load into RAM)
 - `≥ 50M points` → chunked NumPy grid accumulator
 
-**Cell 12** — Generate the all-village overview report.
-
-**Cell 13** — Verify all output files exist and are OGC-compliant.
+**Cell 12** — Verify all output files exist and are OGC-compliant.
 
 ---
 
@@ -188,21 +181,24 @@ pyproj  whitebox  cloth-simulation-filter  networkx  matplotlib  tqdm
 
 | Component | Library | Version |
 |-----------|---------|---------|
-| Point cloud I/O | `laspy[lazrs]` | — |
-| Ground classification | `cloth-simulation-filter` (CSF) | — |
-| Raster I/O & COG export | `rasterio` | 1.5.0 |
-| Vector output | `geopandas`, `shapely` | 1.1.3 |
-| ML classification | `xgboost`, `scikit-learn` | 3.2.0 |
-| Terrain derivatives | `scipy.ndimage`, `whitebox` | — |
-| Coordinate reprojection | `pyproj` | — |
+| Point cloud I/O | `laspy[lazrs]` | ≥ 2.5.4 |
+| Ground classification | `cloth-simulation-filter` (CSF) | ≥ 1.1.7 |
+| Raster I/O & COG export | `rasterio` | ≥ 1.4.0 |
+| Vector output | `geopandas`, `shapely` | ≥ 1.0.1 |
+| ML classification | `xgboost`, `scikit-learn` | ≥ 2.1.3 / ≥ 1.6.1 |
+| Terrain derivatives | `scipy.ndimage`, `whitebox` | ≥ 1.15.0 / ≥ 2.3.4 |
+| Coordinate reprojection | `pyproj` | ≥ 3.7.0 |
 | Drainage routing | `heapq` (Dijkstra) | stdlib |
-| Numerical core | `numpy` | 2.0.2 |
-| Visualisation | `matplotlib` | — |
-| Runtime | Google Colab High-RAM | — |
+| Numerical core | `numpy` | ≥ 2.0.0 |
+| Visualisation | `matplotlib`, `plotly` | — / ≥ 5.24.0 |
+| Graph algorithms | `networkx` | ≥ 3.4.2 |
+| Dashboard / UI | `streamlit` | ≥ 1.41.0 |
+| Runtime — pipeline | Google Colab High-RAM (≥ 52 GB) | — |
+| Runtime — dashboard | Local / Streamlit Cloud | — |
 
 ---
 
-## CSF Ground Classification Parameters
+# CSF Ground Classification Parameters
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
@@ -215,7 +211,7 @@ pyproj  whitebox  cloth-simulation-filter  networkx  matplotlib  tqdm
 
 ---
 
-## Impact
+# Impact
 
 - **Environmental**: Identifies drainage bottlenecks before monsoon season, reducing flood damage
 - **Social**: Enables Gram Panchayats to plan drainage works without GIS expertise
@@ -227,19 +223,14 @@ pyproj  whitebox  cloth-simulation-filter  networkx  matplotlib  tqdm
 
 ## Team
 
-| Field | Details |
-|-------|---------|
-| Team name | *(fill in)* |
-| Members | *(fill in)* |
-| Institution | *(fill in)* |
-| Contact | *(fill in)* |
-| GitHub | *(this repo)* |
+| Name | Institution | Contact |
+|------|-------------|---------|
+| Monty Milan Biswal | SRMIST, Kattankulathur | mb4529@srmist.edu.in |
+| Chinmay Mishra | SRMIST, Kattankulathur | cm1372@srmist.edu.in |
+| Sneha Pathak | SRMIST, Kattankulathur | sp8364@srmist.edu.in |
+| Shikhar Mohan | SRMIST, Kattankulathur | sm7308@srmist.edu.in |
+| Bivesh Dalai | IIT Madras | ch24b046@smail.iitm.ac.in |
 
----
-
-## License
-
-MIT License — see `LICENSE` file.
 
 ---
 
